@@ -75,6 +75,146 @@ const getSessionId = () => {
   return sessionId;
 };
 
+// ========== Multi-Chat Session Management ==========
+
+const CHATS_KEY = 'saleshub_chats';
+const ACTIVE_CHAT_KEY = 'saleshub_active_chat';
+
+// Get all chats from localStorage
+const getAllChats = () => {
+  try {
+    const chats = localStorage.getItem(CHATS_KEY);
+    return chats ? JSON.parse(chats) : [];
+  } catch (error) {
+    console.error('Error loading chats:', error);
+    return [];
+  }
+};
+
+// Save all chats to localStorage
+const saveAllChats = (chats) => {
+  try {
+    localStorage.setItem(CHATS_KEY, JSON.stringify(chats));
+  } catch (error) {
+    console.error('Error saving chats:', error);
+  }
+};
+
+// Get active chat ID
+const getActiveChatId = () => {
+  return localStorage.getItem(ACTIVE_CHAT_KEY);
+};
+
+// Set active chat ID
+const setActiveChatId = (chatId) => {
+  if (chatId) {
+    localStorage.setItem(ACTIVE_CHAT_KEY, chatId);
+  } else {
+    localStorage.removeItem(ACTIVE_CHAT_KEY);
+  }
+};
+
+// Create a new chat
+const createChat = () => {
+  const chatId = 'chat_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+  const newChat = {
+    id: chatId,
+    title: 'New Chat',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    messages: []
+  };
+
+  const chats = getAllChats();
+  chats.unshift(newChat);
+  saveAllChats(chats);
+  setActiveChatId(chatId);
+
+  return newChat;
+};
+
+// Delete a chat
+const deleteChat = (chatId) => {
+  const chats = getAllChats();
+  const filteredChats = chats.filter(chat => chat.id !== chatId);
+  saveAllChats(filteredChats);
+
+  // If deleted chat was active, clear or set new active
+  if (getActiveChatId() === chatId) {
+    if (filteredChats.length > 0) {
+      setActiveChatId(filteredChats[0].id);
+    } else {
+      setActiveChatId(null);
+    }
+  }
+
+  return filteredChats;
+};
+
+// Get a specific chat by ID
+const getChatById = (chatId) => {
+  const chats = getAllChats();
+  return chats.find(chat => chat.id === chatId) || null;
+};
+
+// Update chat title
+const updateChatTitle = (chatId, title) => {
+  const chats = getAllChats();
+  const chatIndex = chats.findIndex(chat => chat.id === chatId);
+
+  if (chatIndex !== -1) {
+    chats[chatIndex].title = title;
+    chats[chatIndex].updatedAt = new Date().toISOString();
+    saveAllChats(chats);
+  }
+
+  return chats;
+};
+
+// Save message to a chat
+const saveMessageToChat = (chatId, message) => {
+  const chats = getAllChats();
+  const chatIndex = chats.findIndex(chat => chat.id === chatId);
+
+  if (chatIndex !== -1) {
+    chats[chatIndex].messages.push(message);
+    chats[chatIndex].updatedAt = new Date().toISOString();
+
+    // Update title from first user message if still "New Chat"
+    if (chats[chatIndex].title === 'New Chat' && message.type === 'user') {
+      const truncatedTitle = message.message.length > 30
+        ? message.message.substring(0, 30) + '...'
+        : message.message;
+      chats[chatIndex].title = truncatedTitle;
+    }
+
+    saveAllChats(chats);
+  }
+
+  return chats;
+};
+
+// Get messages for a specific chat
+const getChatMessages = (chatId) => {
+  const chat = getChatById(chatId);
+  return chat ? chat.messages : [];
+};
+
+// Clear messages for a specific chat
+const clearChatMessages = (chatId) => {
+  const chats = getAllChats();
+  const chatIndex = chats.findIndex(chat => chat.id === chatId);
+
+  if (chatIndex !== -1) {
+    chats[chatIndex].messages = [];
+    chats[chatIndex].title = 'New Chat';
+    chats[chatIndex].updatedAt = new Date().toISOString();
+    saveAllChats(chats);
+  }
+
+  return chats;
+};
+
 // Chat API calls
 export const chatService = {
   sendMessage: async (message) => {
@@ -149,6 +289,17 @@ export const healthService = {
 export const utils = {
   getUserId,
   getSessionId,
+  // Multi-chat management
+  getAllChats,
+  createChat,
+  deleteChat,
+  getChatById,
+  updateChatTitle,
+  saveMessageToChat,
+  getChatMessages,
+  clearChatMessages,
+  getActiveChatId,
+  setActiveChatId,
   truncateText: (text, maxLength = 50) => {
     if (!text) return "";
     if (text.length <= maxLength) return text;

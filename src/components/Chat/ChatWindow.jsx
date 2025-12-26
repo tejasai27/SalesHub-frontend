@@ -14,7 +14,7 @@ const EXAMPLE_PROMPTS = [
   { emoji: "🔥", text: "Re-engage cold lead", category: "Follow-up" }
 ];
 
-const ChatWindow = ({ showHistory, hideHeader = false }) => {
+const ChatWindow = ({ chatId, showHistory, hideHeader = false, onChatUpdate }) => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -26,9 +26,18 @@ const ChatWindow = ({ showHistory, hideHeader = false }) => {
   const inputRef = useRef(null);
 
   useEffect(() => {
-    loadChatHistory();
     testConnection();
   }, []);
+
+  // Load messages when chatId changes
+  useEffect(() => {
+    if (chatId) {
+      const chatMessages = utils.getChatMessages(chatId);
+      setMessages(chatMessages);
+    } else {
+      setMessages([]);
+    }
+  }, [chatId]);
 
   useEffect(() => {
     scrollToBottom();
@@ -60,7 +69,7 @@ const ChatWindow = ({ showHistory, hideHeader = false }) => {
 
   const handleSend = async (e) => {
     e?.preventDefault();
-    if (!input.trim() || loading) return;
+    if (!input.trim() || loading || !chatId) return;
 
     const userMessage = {
       id: Date.now(),
@@ -69,10 +78,15 @@ const ChatWindow = ({ showHistory, hideHeader = false }) => {
       timestamp: new Date().toISOString(),
     };
 
+    // Save user message to current chat
+    utils.saveMessageToChat(chatId, userMessage);
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setLoading(true);
     setIsTyping(true);
+
+    // Notify parent to refresh chat list
+    if (onChatUpdate) onChatUpdate();
 
     try {
       const response = await chatService.sendMessage(userMessage.message);
@@ -88,7 +102,13 @@ const ChatWindow = ({ showHistory, hideHeader = false }) => {
         message: response.response,
         timestamp: response.timestamp || new Date().toISOString(),
       };
+
+      // Save AI response to current chat
+      utils.saveMessageToChat(chatId, aiMessage);
       setMessages(prev => [...prev, aiMessage]);
+
+      // Notify parent to refresh chat list
+      if (onChatUpdate) onChatUpdate();
     } catch (error) {
       console.error('Chat error:', error);
       const errorMessage = {
