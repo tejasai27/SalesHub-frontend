@@ -14,7 +14,7 @@ const EXAMPLE_PROMPTS = [
   { emoji: "🔥", text: "Re-engage cold lead", category: "Follow-up" }
 ];
 
-const ChatWindow = ({ showHistory }) => {
+const ChatWindow = ({ showHistory, hideHeader = false }) => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -142,47 +142,49 @@ const ChatWindow = ({ showHistory }) => {
 
   return (
     <div className="flex flex-col h-full bg-gradient-to-b from-slate-50 to-white font-sans antialiased">
-      {/* Header */}
-      <div className="px-5 py-4 border-b border-slate-100 bg-white/80 backdrop-blur-sm">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="relative">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/25">
-                <FiMessageSquare className="w-5 h-5 text-white" />
+      {/* Header - Hidden when used in floating widget */}
+      {!hideHeader && (
+        <div className="px-5 py-4 border-b border-slate-100 bg-white/80 backdrop-blur-sm">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/25">
+                  <FiMessageSquare className="w-5 h-5 text-white" />
+                </div>
+                {connectionStatus === 'connected' && (
+                  <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 rounded-full ring-2 ring-white">
+                    <span className="absolute inset-0 rounded-full bg-emerald-400 animate-ping opacity-75"></span>
+                  </div>
+                )}
               </div>
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">SalesHub AI</h2>
+                <div className={`flex items-center gap-1.5 text-xs font-medium ${connectionStatus === 'connected' ? 'text-emerald-600' : 'text-amber-600'
+                  }`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${connectionStatus === 'connected' ? 'bg-emerald-500' : 'bg-amber-500'
+                    }`}></span>
+                  {getConnectionMessage()}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {rateLimit && (
+                <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-100 rounded-lg">
+                  <FiZap className="w-3 h-3 text-slate-500" />
+                  <span className="text-xs text-slate-600">{rateLimit.remaining_minute}/min</span>
+                </div>
+              )}
               {connectionStatus === 'connected' && (
-                <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 rounded-full ring-2 ring-white">
-                  <span className="absolute inset-0 rounded-full bg-emerald-400 animate-ping opacity-75"></span>
+                <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-lg border border-emerald-200/50">
+                  <FiZap className="w-3 h-3 text-emerald-600" />
+                  <span className="text-xs font-semibold text-emerald-700">Live</span>
                 </div>
               )}
             </div>
-            <div>
-              <h2 className="text-lg font-bold text-slate-900">SalesHub AI</h2>
-              <div className={`flex items-center gap-1.5 text-xs font-medium ${connectionStatus === 'connected' ? 'text-emerald-600' : 'text-amber-600'
-                }`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${connectionStatus === 'connected' ? 'bg-emerald-500' : 'bg-amber-500'
-                  }`}></span>
-                {getConnectionMessage()}
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {rateLimit && (
-              <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-100 rounded-lg">
-                <FiZap className="w-3 h-3 text-slate-500" />
-                <span className="text-xs text-slate-600">{rateLimit.remaining_minute}/min</span>
-              </div>
-            )}
-            {connectionStatus === 'connected' && (
-              <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-lg border border-emerald-200/50">
-                <FiZap className="w-3 h-3 text-emerald-600" />
-                <span className="text-xs font-semibold text-emerald-700">Live</span>
-              </div>
-            )}
           </div>
         </div>
-      </div>
+      )}
 
       {/* Messages */}
       <div className="flex-1 overflow-hidden">
@@ -256,8 +258,8 @@ const ChatWindow = ({ showHistory }) => {
                   {msg.type === 'assistant' && (
                     <div className="flex-shrink-0">
                       <div className={`w-8 h-8 rounded-xl flex items-center justify-center shadow-md ${msg.isError
-                          ? 'bg-gradient-to-br from-red-500 to-rose-600'
-                          : 'bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-600'
+                        ? 'bg-gradient-to-br from-red-500 to-rose-600'
+                        : 'bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-600'
                         }`}>
                         <FiMessageSquare className="w-4 h-4 text-white" />
                       </div>
@@ -267,10 +269,10 @@ const ChatWindow = ({ showHistory }) => {
                   <div className={`group max-w-[75%] ${showHistory ? 'max-w-[70%]' : ''}`}>
                     <div
                       className={`relative rounded-2xl px-4 py-3 ${msg.type === 'user'
-                          ? 'bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white shadow-lg shadow-blue-500/25'
-                          : msg.isError
-                            ? 'bg-red-50 text-red-800 border border-red-200'
-                            : 'bg-white text-slate-800 border border-slate-200 shadow-sm'
+                        ? 'bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white shadow-lg shadow-blue-500/25'
+                        : msg.isError
+                          ? 'bg-red-50 text-red-800 border border-red-200'
+                          : 'bg-white text-slate-800 border border-slate-200 shadow-sm'
                         }`}
                     >
                       <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
@@ -359,8 +361,8 @@ const ChatWindow = ({ showHistory }) => {
               type="submit"
               disabled={!input.trim() || loading || connectionStatus !== 'connected'}
               className={`rounded-xl w-12 h-12 p-0 flex items-center justify-center transition-all duration-200 ${input.trim() && !loading && connectionStatus === 'connected'
-                  ? 'bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:shadow-lg hover:shadow-blue-500/30 hover:scale-105'
-                  : 'bg-slate-200'
+                ? 'bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:shadow-lg hover:shadow-blue-500/30 hover:scale-105'
+                : 'bg-slate-200'
                 }`}
             >
               {loading ? (
