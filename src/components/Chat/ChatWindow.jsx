@@ -14,7 +14,7 @@ const EXAMPLE_PROMPTS = [
   { emoji: "🔥", text: "Re-engage cold lead", category: "Follow-up" }
 ];
 
-const ChatWindow = ({ chatId, showHistory, hideHeader = false, onChatUpdate }) => {
+const ChatWindow = ({ chatId, showHistory, hideHeader = false, onChatUpdate, sidebarOpen = false }) => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -247,7 +247,7 @@ const ChatWindow = ({ chatId, showHistory, hideHeader = false, onChatUpdate }) =
               {connectionStatus === 'connected' && (
                 <div className="w-full max-w-lg">
                   <p className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-4">Try these prompts</p>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className={`grid gap-2 ${sidebarOpen ? 'grid-cols-1' : 'grid-cols-2'}`}>
                     {EXAMPLE_PROMPTS.map((prompt, index) => (
                       <button
                         key={index}

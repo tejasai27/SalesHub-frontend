@@ -25,7 +25,7 @@ const ChatSidebar = ({
 
     return (
         <div
-            className={`flex flex-col h-full bg-white/90 backdrop-blur-md border-r border-slate-200/50 transition-all duration-300 ${isCollapsed ? 'w-14' : 'w-64'
+            className={`flex flex-col h-full bg-white/90 backdrop-blur-md border-r border-slate-200/50 transition-all duration-300 ${isCollapsed ? 'w-12' : 'w-44'
                 }`}
         >
             {/* Header */}
@@ -77,15 +77,15 @@ const ChatSidebar = ({
                             <div
                                 key={chat.id}
                                 className={`group relative flex items-center gap-2 px-3 py-2.5 rounded-xl cursor-pointer transition-all duration-200 ${activeChatId === chat.id
-                                        ? 'bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200/50 shadow-sm'
-                                        : 'hover:bg-slate-50 border border-transparent'
+                                    ? 'bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200/50 shadow-sm'
+                                    : 'hover:bg-slate-50 border border-transparent'
                                     }`}
                                 onClick={() => onSelectChat(chat.id)}
                                 title={chat.title}
                             >
                                 <div className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center ${activeChatId === chat.id
-                                        ? 'bg-gradient-to-br from-blue-600 to-indigo-600'
-                                        : 'bg-slate-200'
+                                    ? 'bg-gradient-to-br from-blue-600 to-indigo-600'
+                                    : 'bg-slate-200'
                                     }`}>
                                     <FiMessageSquare className={`w-4 h-4 ${activeChatId === chat.id ? 'text-white' : 'text-slate-500'
                                         }`} />

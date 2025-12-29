@@ -127,6 +127,7 @@ function App() {
               showHistory={false}
               hideHeader={true}
               onChatUpdate={handleChatUpdate}
+              sidebarOpen={sidebarOpen}
             />
           ) : (
             <div className="flex flex-col items-center justify-center h-full text-center px-8">
