@@ -285,6 +285,57 @@ export const healthService = {
   },
 };
 
+// Tracking service for website visit analytics
+export const trackingService = {
+  getHistory: async (limit = 100, offset = 0, domain = null) => {
+    try {
+      const userId = getUserId();
+      let url = `/tracking/history/${userId}?limit=${limit}&offset=${offset}`;
+      if (domain) {
+        url += `&domain=${encodeURIComponent(domain)}`;
+      }
+      const response = await api.get(url);
+      return response.data;
+    } catch (error) {
+      console.error("Tracking history error:", error);
+      return {
+        success: false,
+        history: [],
+        error: error.message,
+      };
+    }
+  },
+
+  getAnalytics: async (days = 7) => {
+    try {
+      const userId = getUserId();
+      const response = await api.get(`/tracking/analytics/${userId}?days=${days}`);
+      return response.data;
+    } catch (error) {
+      console.error("Tracking analytics error:", error);
+      return {
+        success: false,
+        analytics: null,
+        error: error.message,
+      };
+    }
+  },
+
+  logVisit: async (data) => {
+    try {
+      const userId = getUserId();
+      const response = await api.post("/tracking/log", {
+        user_id: userId,
+        ...data,
+      });
+      return response.data;
+    } catch (error) {
+      console.error("Log visit error:", error);
+      return { success: false, error: error.message };
+    }
+  },
+};
+
 // Export utilities
 export const utils = {
   getUserId,

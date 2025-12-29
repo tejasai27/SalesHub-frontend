@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from "react";
 import ChatWindow from "./components/Chat/ChatWindow";
 import ChatSidebar from "./components/Chat/ChatSidebar";
+import TrackingDashboard from "./components/Tracking/TrackingDashboard";
 import { healthService, utils } from "./services/api";
-import { FiMessageCircle, FiMenu } from "react-icons/fi";
+import { FiMessageCircle, FiMenu, FiActivity } from "react-icons/fi";
 
 function App() {
   const [backendHealth, setBackendHealth] = useState(null);
   const [chats, setChats] = useState([]);
   const [activeChatId, setActiveChatId] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [activeView, setActiveView] = useState("chat"); // 'chat' or 'tracking'
 
   useEffect(() => {
     checkBackendHealth();
@@ -75,24 +77,57 @@ function App() {
       {/* Compact Header - Slim for extension */}
       <header className="bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-3 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-3">
-          {/* Mobile menu button */}
-          <button
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
-          >
-            <FiMenu className="w-4 h-4" />
-          </button>
+          {/* Mobile menu button - only show in chat view */}
+          {activeView === "chat" && (
+            <button
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
+            >
+              <FiMenu className="w-4 h-4" />
+            </button>
+          )}
           <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center">
-            <FiMessageCircle className="w-4 h-4 text-white" />
+            {activeView === "chat" ? (
+              <FiMessageCircle className="w-4 h-4 text-white" />
+            ) : (
+              <FiActivity className="w-4 h-4 text-white" />
+            )}
           </div>
           <div>
             <h1 className="text-white font-semibold text-base">SalesHub AI</h1>
-            <p className="text-white/70 text-xs">Sales Assistant</p>
+            <p className="text-white/70 text-xs">
+              {activeView === "chat" ? "Sales Assistant" : "Website Tracking"}
+            </p>
           </div>
         </div>
 
-        {/* Status Indicator */}
+        {/* View Tabs & Status */}
         <div className="flex items-center gap-2">
+          {/* View Toggle Tabs */}
+          <div className="flex bg-white/10 rounded-lg p-0.5">
+            <button
+              onClick={() => setActiveView("chat")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${activeView === "chat"
+                  ? "bg-white text-indigo-600"
+                  : "text-white/80 hover:text-white hover:bg-white/10"
+                }`}
+            >
+              <FiMessageCircle className="w-3.5 h-3.5" />
+              Chat
+            </button>
+            <button
+              onClick={() => setActiveView("tracking")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${activeView === "tracking"
+                  ? "bg-white text-indigo-600"
+                  : "text-white/80 hover:text-white hover:bg-white/10"
+                }`}
+            >
+              <FiActivity className="w-3.5 h-3.5" />
+              Tracking
+            </button>
+          </div>
+
+          {/* Status Indicator */}
           <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${backendHealth?.status === "healthy"
             ? "bg-green-400/20 text-green-100"
             : "bg-red-400/20 text-red-100"
@@ -104,53 +139,61 @@ function App() {
         </div>
       </header>
 
-      {/* Main Content with Sidebar */}
+      {/* Main Content */}
       <main className="flex-1 flex overflow-hidden">
-        {/* Chat Sidebar */}
-        {sidebarOpen && (
-          <ChatSidebar
-            chats={chats}
-            activeChatId={activeChatId}
-            onSelectChat={handleSelectChat}
-            onNewChat={handleNewChat}
-            onDeleteChat={handleDeleteChat}
-            isCollapsed={false}
-            onToggleCollapse={() => setSidebarOpen(false)}
-          />
-        )}
+        {activeView === "chat" ? (
+          <>
+            {/* Chat Sidebar */}
+            {sidebarOpen && (
+              <ChatSidebar
+                chats={chats}
+                activeChatId={activeChatId}
+                onSelectChat={handleSelectChat}
+                onNewChat={handleNewChat}
+                onDeleteChat={handleDeleteChat}
+                isCollapsed={false}
+                onToggleCollapse={() => setSidebarOpen(false)}
+              />
+            )}
 
-        {/* Chat Area */}
-        <div className="flex-1 overflow-hidden">
-          {activeChatId ? (
-            <ChatWindow
-              chatId={activeChatId}
-              showHistory={false}
-              hideHeader={true}
-              onChatUpdate={handleChatUpdate}
-              sidebarOpen={sidebarOpen}
-            />
-          ) : (
-            <div className="flex flex-col items-center justify-center h-full text-center px-8">
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/25 mb-4">
-                <FiMessageCircle className="w-8 h-8 text-white" />
-              </div>
-              <h3 className="text-xl font-bold text-slate-800 mb-2">Start a Conversation</h3>
-              <p className="text-slate-500 mb-6 max-w-sm">
-                Create a new chat to begin talking with your AI sales assistant.
-              </p>
-              <button
-                onClick={handleNewChat}
-                className="px-6 py-3 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white font-medium shadow-lg shadow-blue-500/25 hover:shadow-xl hover:shadow-blue-500/30 hover:-translate-y-0.5 transition-all duration-200"
-              >
-                New Chat
-              </button>
+            {/* Chat Area */}
+            <div className="flex-1 overflow-hidden">
+              {activeChatId ? (
+                <ChatWindow
+                  chatId={activeChatId}
+                  showHistory={false}
+                  hideHeader={true}
+                  onChatUpdate={handleChatUpdate}
+                  sidebarOpen={sidebarOpen}
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-center px-8">
+                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/25 mb-4">
+                    <FiMessageCircle className="w-8 h-8 text-white" />
+                  </div>
+                  <h3 className="text-xl font-bold text-slate-800 mb-2">Start a Conversation</h3>
+                  <p className="text-slate-500 mb-6 max-w-sm">
+                    Create a new chat to begin talking with your AI sales assistant.
+                  </p>
+                  <button
+                    onClick={handleNewChat}
+                    className="px-6 py-3 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white font-medium shadow-lg shadow-blue-500/25 hover:shadow-xl hover:shadow-blue-500/30 hover:-translate-y-0.5 transition-all duration-200"
+                  >
+                    New Chat
+                  </button>
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          </>
+        ) : (
+          /* Tracking Dashboard */
+          <div className="flex-1 overflow-hidden">
+            <TrackingDashboard />
+          </div>
+        )}
       </main>
     </div>
   );
 }
 
 export default App;
-
