@@ -9,47 +9,42 @@ This document provides a comprehensive overview of the project structure, explai
 ```
 Project_extension/
 ├── Extension/              # Backend (Python/Flask API)
-└── Extension-frontend/     # Frontend (React/Vite SPA)
+└── Extension-frontend/     # Frontend (React/Vite Chrome Extension)
 ```
 
 ---
 
 ## 🔧 Backend (`Extension/`)
 
-The backend is a Flask-based REST API that handles AI chat, browser activity tracking, and data persistence.
+The backend is a Flask-based REST API that handles AI chat, analytics, and data persistence.
 
 ### Core Application Files
 
 | File | Responsibility |
 |------|----------------|
 | [`app.py`](Extension/app.py) | **Main Flask application factory**. Creates and configures the Flask app, initializes CORS, registers blueprints, sets up database connection, and defines health check endpoints. Entry point when running `python app.py`. |
-| [`config.py`](Extension/config.py) | **Application configuration**. Loads environment variables, configures database connection (PostgreSQL/SQLite/MySQL), Gemini API settings, and CORS origins. |
-| [`run.py`](Extension/run.py) | Alternative entry point for running the Flask application. |
-| [`wsgi.py`](Extension/wsgi.py) | **WSGI entry point** for production deployment with Gunicorn or similar WSGI servers. |
+| [`config.py`](Extension/config.py) | **Application configuration**. Loads environment variables, configures SQLite database for local development, Gemini AI settings, and CORS origins for localhost and Chrome extensions. |
+| [`run.py`](Extension/run.py) | **Development server entry point**. Runs the Flask application in development mode. |
 | [`requirements.txt`](Extension/requirements.txt) | Python package dependencies for the backend. |
-| [`pyproject.toml`](Extension/pyproject.toml) | Python project metadata and build configuration. |
-| [`runtime.txt`](Extension/runtime.txt) | Specifies Python version for deployment platforms like Render. |
+| [`pyproject.toml`](Extension/pyproject.toml) | Python  project metadata and build configuration. |
 
-### Deployment Configuration
+### Environment Configuration
 
 | File | Responsibility |
 |------|----------------|
-| [`Dockerfile`](Extension/Dockerfile) | Docker container configuration for containerized deployment. |
-| [`render.yaml`](Extension/render.yaml) | **Render.com deployment configuration**. Defines services, build commands, and environment variables for cloud deployment. |
-| `.env` | **Environment variables** (gitignored). Contains sensitive configuration like `GEMINI_API_KEY`, database credentials, and `CORS_ORIGINS`. |
+| `.env` | **Environment variables** (gitignored). Contains `GEMINI_API_KEY`, optional `SECRET_KEY`, and `CORS_ORIGINS` for local development. |
 
 ---
 
 ### 📂 `routes/` - API Endpoints
 
-This directory contains Flask Blueprints that define the REST API endpoints.
+Flask Blueprints that define the REST API endpoints.
 
 | File | Responsibility |
 |------|----------------|
 | [`routes/__init__.py`](Extension/routes/__init__.py) | Package initializer for routes module. |
-| [`routes/chat.py`](Extension/routes/chat.py) | **AI Chat API endpoints**. Handles chat message sending (`POST /api/chat/send`), chat history retrieval (`GET /api/chat/history/<user_id>`), and Gemini API testing (`GET /api/chat/test`). |
-| [`routes/tracking.py`](Extension/routes/tracking.py) | **Browser Activity Tracking API**. Handles activity logging (`POST /api/track/activity`), daily summary retrieval (`GET /api/track/summary/<user_id>`), and activity history queries. |
-| [`routes/debug.py`](Extension/routes/debug.py) | **Debug utilities**. Provides debugging endpoints for development and troubleshooting. |
+| [`routes/chat.py`](Extension/routes/chat.py) | **AI Chat API endpoints**. Handles chat messaging with rate limiting, validation, and analytics. Includes:<br>• `POST /api/chat/send` - Send message to AI<br>• `GET /api/chat/history/<user_id>` - Get chat history<br>• `GET /api/chat/test` - Test Gemini connection<br>• `GET /api/chat/export/<user_id>` - Export chat history<br>• `GET /api/chat/stats/<user_id>` - Get user statistics<br>• `GET /api/chat/analytics` - Get system analytics |
+| [`routes/debug.py`](Extension/routes/debug.py) | **Debug utilities**. Development and troubleshooting endpoints:<br>• `GET /api/debug/db-status` - Database status check<br>• `GET /api/debug/user-data/<user_id>` - Get user data |
 
 ---
 
@@ -57,7 +52,8 @@ This directory contains Flask Blueprints that define the REST API endpoints.
 
 | File | Responsibility |
 |------|----------------|
-| [`database/models.py`](Extension/database/models.py) | **SQLAlchemy ORM models**. Defines database schema with the following models: |
+| [`database/models.py`](Extension/database/models.py) | **SQLAlchemy ORM models**. Defines database schema with User, ChatSession, BrowserActivity, and DailySession models. |
+| [`database/db_init.sql`](Extension/database/db_init.sql) | Raw SQL initialization script for manual database setup. |
 
 #### Database Models
 
@@ -103,10 +99,6 @@ DailySession:
   - chat_messages_count      # Messages exchanged
 ```
 
-| File | Responsibility |
-|------|----------------|
-| [`database/db_init.sql`](Extension/database/db_init.sql) | Raw SQL initialization script for manual database setup. |
-
 ---
 
 ### 📂 `utils/` - Utility Modules
@@ -114,33 +106,35 @@ DailySession:
 | File | Responsibility |
 |------|----------------|
 | [`utils/gemini_client.py`](Extension/utils/gemini_client.py) | **Gemini AI Integration**. Wrapper class for Google's Generative AI API. Handles AI initialization, response generation with context, safety settings, and error handling. |
-| [`utils/validators.py`](Extension/utils/validators.py) | Input validation utilities for API requests. |
+| [`utils/validators.py`](Extension/utils/validators.py) | **Input validation utilities**. Validates API request data including message length, user IDs, and request formats. |
+| [`utils/analytics.py`](Extension/utils/analytics.py) | **Analytics tracking**. In-memory analytics for tracking message counts, response times, error rates, and user statistics. Includes `Analytics` class and `ResponseTimer` context manager. |
+| [`utils/rate_limiter.py`](Extension/utils/rate_limiter.py) | **Rate limiting**. Per-user rate limiting to prevent API abuse. Supports per-minute and per-day limits with thread-safe operations. |
 
 ---
 
 ## 🎨 Frontend (`Extension-frontend/`)
 
-The frontend is a React Single Page Application built with Vite, featuring a dashboard and AI chat interface.
+The frontend is a React Single Page Application built with Vite, designed as a Chrome extension with AI chat interface.
 
 ### Root Configuration Files
 
 | File | Responsibility |
 |------|----------------|
-| [`package.json`](Extension-frontend/package.json) | **NPM configuration**. Defines dependencies (React, Axios, Chart.js), scripts (`dev`, `build`), and project metadata. |
+| [`package.json`](Extension-frontend/package.json) | **NPM configuration**. Defines dependencies (React, Axios, Chart.js, React Icons), scripts (`dev`, `build`, `preview`), and project metadata. |
 | [`package-lock.json`](Extension-frontend/package-lock.json) | Locked dependency versions for reproducible builds. |
-| [`vite.config.js`](Extension-frontend/vite.config.js) | **Vite configuration**. Build settings, plugins, and development server options. |
+| [`vite.config.js`](Extension-frontend/vite.config.js) | **Vite configuration**. Build settings, React plugin, proxy configuration for local dev, and code splitting. |
 | [`tailwind.config.js`](Extension-frontend/tailwind.config.js) | **TailwindCSS configuration**. Custom theme, colors, and utility extensions. |
-| [`postcss.config.js`](Extension-frontend/postcss.config.js) | PostCSS configuration for CSS processing. |
-| [`eslint.config.js`](Extension-frontend/eslint.config.js) | ESLint rules for code quality. |
+| [`postcss.config.js`](Extension-frontend/postcss.config.js) | PostCSS configuration for CSS processing with Tailwind and Autoprefixer. |
+| [`eslint.config.js`](Extension-frontend/eslint.config.js) | ESLint rules for code quality and React best practices. |
 | [`index.html`](Extension-frontend/index.html) | **HTML entry point**. Root HTML file that loads the React app. |
-| [`vercel.json`](Extension-frontend/vercel.json) | **Vercel deployment configuration**. Routing rules and build settings for Vercel hosting. |
+| [`generate-icons.js`](Extension-frontend/generate-icons.js) | **Icon generator utility**. Generates PNG icons in multiple sizes (16x16, 48x48, 128x128) from SVG source for Chrome extension requirements. |
 
 ### Environment Files
 
 | File | Responsibility |
 |------|----------------|
-| `.env.development` | Development environment variables (e.g., `VITE_API_BASE_URL=http://localhost:5000/api`). |
-| `.env.production` | Production environment variables (e.g., Render backend URL). |
+| `.env` | Local environment variables (`VITE_API_BASE_URL=http://localhost:5000/api`). |
+| `.env.development` | Development environment variables for local development. |
 
 ---
 
@@ -149,9 +143,9 @@ The frontend is a React Single Page Application built with Vite, featuring a das
 | File | Responsibility |
 |------|----------------|
 | [`src/main.jsx`](Extension-frontend/src/main.jsx) | **React entry point**. Renders the root `App` component into the DOM. |
-| [`src/App.jsx`](Extension-frontend/src/App.jsx) | **Main application component**. Contains the entire app layout including navigation tabs (Dashboard/Chat), backend health checking, and content rendering logic. |
+| [`src/App.jsx`](Extension-frontend/src/App.jsx) | **Main application component**. Contains the entire app layout including navigation, backend health checking, and chat interface rendering logic. |
 | [`src/App.css`](Extension-frontend/src/App.css) | Component-specific styles for App. |
-| [`src/index.css`](Extension-frontend/src/index.css) | **Global styles**. TailwindCSS imports and base styles. |
+| [`src/index.css`](Extension-frontend/src/index.css) | **Global styles**. TailwindCSS imports and base application styles. |
 
 ---
 
@@ -161,26 +155,18 @@ The frontend is a React Single Page Application built with Vite, featuring a das
 
 | File | Responsibility |
 |------|----------------|
-| `ChatWindow.jsx` | **Main chat interface**. Displays messages, handles user input, sends messages to backend, and renders AI responses. |
-| `ChatHistory.jsx` | **Chat history sidebar**. Shows previous conversations and allows navigation between chat sessions. |
-
-#### Dashboard Components (`src/components/Dashboard/`)
-
-| File | Responsibility |
-|------|----------------|
-| `StatsCard.jsx` | **Statistics display cards**. Reusable component for showing metrics like page visits, interactions, etc. |
-| `ActivityChart.jsx` | **Activity visualization**. Chart.js-based graphs showing browsing patterns over time. |
-| `RecentActivity.jsx` | **Activity feed**. Lists recent browsing activities with timestamps. |
-| `DomainBreakdown.jsx` | **Domain analytics**. Shows which websites were visited most frequently. |
+| [`ChatWindow.jsx`](Extension-frontend/src/components/Chat/ChatWindow.jsx) | **Main chat interface**. Displays messages, handles user input, sends messages to backend, and renders AI responses with markdown support. |
+| [`ChatHistory.jsx`](Extension-frontend/src/components/Chat/ChatHistory.jsx) | **Chat history management**. Manages chat sessions, displays conversation list, and handles chat loading/deletion. |
+| [`ChatSidebar.jsx`](Extension-frontend/src/components/Chat/ChatSidebar.jsx) | **Collapsible sidebar**. Shows conversation list with titles, timestamps, new chat button, and delete functionality. Supports collapsed/expanded states. |
 
 #### Common Components (`src/components/Common/`)
 
 | File | Responsibility |
 |------|----------------|
-| `Header.jsx` | Application header/navigation bar. |
-| `Sidebar.jsx` | Side navigation component. |
-| `Loading.jsx` | Loading spinner/indicator component. |
-| `ErrorBoundary.jsx` | React error boundary for graceful error handling. |
+| [`Button.jsx`](Extension-frontend/src/components/Common/Button.jsx) | **Reusable button component**. Customizable button with variants, sizes, and loading states. |
+| [`Card.jsx`](Extension-frontend/src/components/Common/Card.jsx) | **Card container component**. Reusable card layout with header, body, and styling options. |
+| [`Input.jsx`](Extension-frontend/src/components/Common/Input.jsx) | **Form input component**. Customizable text input with labels, validation states, and icons. |
+| [`LoadingSpinner.jsx`](Extension-frontend/src/components/Common/LoadingSpinner.jsx) | **Loading indicator**. Animated loading spinner for async operations. |
 
 ---
 
@@ -188,48 +174,36 @@ The frontend is a React Single Page Application built with Vite, featuring a das
 
 | File | Responsibility |
 |------|----------------|
-| [`src/services/api.js`](Extension-frontend/src/services/api.js) | **API client and services**. Central module containing: |
-
-```javascript
-// Axios instance with interceptors
-api - Configured axios instance with base URL, timeout, and error handling
-
-// Chat Service
-chatService.sendMessage(message)     - Send chat message to AI
-chatService.getChatHistory(limit)    - Get user's chat history
-chatService.testConnection()         - Test backend connectivity
-
-// Tracking Service  
-trackingService.trackActivity(data)  - Log browser activity
-trackingService.getDailySummary()    - Get daily statistics
-trackingService.trackPageVisit()     - Track page visits
-trackingService.trackInteraction()   - Track user interactions
-
-// Health Service
-healthService.checkBackend()         - Check backend health status
-
-// Utilities
-utils.getUserId()                    - Get/generate user ID
-utils.getSessionId()                 - Get/generate session ID
-utils.formatTime(timestamp)          - Format timestamps
-utils.truncateText(text, length)     - Truncate long text
-```
-
-| File | Responsibility |
-|------|----------------|
-| [`src/services/dashboardService.js`](Extension-frontend/src/services/dashboardService.js) | **Dashboard data service**. Specialized service for fetching and transforming dashboard analytics data. |
+| [`src/services/api.js`](Extension-frontend/src/services/api.js) | **API client and services**. Central module containing Axios instance with interceptors and service methods:<br><br>**Chat Service:**<br>• `sendMessage(message)` - Send chat message<br>• `getChatHistory(limit)` - Get chat history<br>• `testConnection()` - Test backend<br><br>**Health Service:**<br>• `checkBackend()` - Backend health check<br><br>**Utilities:**<br>• `getUserId()` - Get/generate user ID<br>• `getSessionId()` - Get/generate session ID<br>• `formatTime(timestamp)` - Format timestamps<br>• `truncateText(text, length)` - Truncate text |
+| [`src/services/dashboardService.js`](Extension-frontend/src/services/dashboardService.js) | **Dashboard data service**. Service for fetching and transforming analytics and statistics data. |
 
 ---
 
 ### 📂 `src/styles/` - Stylesheets
 
 | File | Responsibility |
-|------|----------------|
-| `components.css` | Shared component styles. |
+|------|-------------------|
+| [`global.css`](Extension-frontend/src/styles/global.css) | Global application styles and custom CSS classes. |
 
 ### 📂 `src/assets/` - Static Assets
 
-Contains images, icons, and other static files used in the application.
+| File | Responsibility |
+|------|----------------|
+| `react.svg` | React logo asset. |
+
+---
+
+### 📂 `public/` - Public Assets
+
+| File | Responsibility |
+|------|----------------|
+| [`manifest.json`](Extension-frontend/public/manifest.json) | **Chrome Extension manifest file**. Defines extension metadata, permissions (`storage`), host permissions (`localhost:5000`), and icon paths. Extension name: "SalesHub AI". |
+| `vite.svg` | Vite logo asset. |
+| `icons/` | Directory containing extension icons (16x16, 48x48, 128x128 PNG files). |
+
+### 📂 `dist/` - Build Output
+
+Built Chrome extension files including compiled JavaScript, HTML, manifest, and icons. This folder is loaded by Chrome when running the extension.
 
 ---
 
@@ -240,7 +214,7 @@ Contains images, icons, and other static files used in the application.
 │                         FRONTEND                                 │
 │  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐      │
 │  │   App.jsx    │───▶│  Components  │───▶│   api.js     │      │
-│  │  (Router)    │    │  (UI Layer)  │    │  (Services)  │      │
+│  │  (Main App)  │    │  (UI Layer)  │    │  (Services)  │      │
 │  └──────────────┘    └──────────────┘    └──────┬───────┘      │
 └─────────────────────────────────────────────────┼───────────────┘
                                                   │ HTTP/REST
@@ -261,24 +235,35 @@ Contains images, icons, and other static files used in the application.
                               │
                               ▼
                     ┌──────────────────┐
-                    │  SQLite/PostgreSQL│
-                    │    (Database)     │
+                    │  SQLite Database │
+                    │     (app.db)     │
                     └──────────────────┘
 ```
 
 ---
 
-## 🚀 Deployment Architecture
+## 🚀 Local Development Architecture
 
 ```
-┌─────────────────────┐         ┌─────────────────────┐
-│      VERCEL         │         │       RENDER        │
-│  (Frontend Host)    │  HTTP   │   (Backend Host)    │
-│                     │◀───────▶│                     │
-│  - Static files     │         │  - Flask API        │
-│  - React SPA        │         │  - PostgreSQL DB    │
-│  - CDN delivery     │         │  - Gemini AI        │
-└─────────────────────┘         └─────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│                    LOCAL DEVELOPMENT                     │
+│                                                          │
+│  ┌─────────────────────┐       ┌─────────────────────┐  │
+│  │   FRONTEND          │       │     BACKEND         │  │
+│  │  localhost:3000     │ HTTP  │  localhost:5000     │  │
+│  │                     │◀─────▶│                     │  │
+│  │  - React/Vite       │       │  - Flask API        │  │
+│  │  - Hot reload       │       │  - SQLite DB        │  │
+│  │  - Dev server       │       │  - Gemini AI        │  │
+│  └─────────────────────┘       └─────────────────────┘  │
+│                                                          │
+│  ┌─────────────────────────────────────────────────┐    │
+│  │            CHROME EXTENSION                     │    │
+│  │  chrome-extension://*                          │    │
+│  │  - Dist folder loaded by Chrome                │    │
+│  │  - manifest.json configuration                 │    │
+│  └─────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -291,33 +276,62 @@ Contains images, icons, and other static files used in the application.
 | `POST` | `/api/chat/send` | Send message to AI |
 | `GET` | `/api/chat/history/<user_id>` | Get chat history |
 | `GET` | `/api/chat/test` | Test Gemini connection |
-| `POST` | `/api/track/activity` | Log browser activity |
-| `GET` | `/api/track/summary/<user_id>` | Get daily summary |
+| `GET` | `/api/chat/export/<user_id>` | Export chat history (JSON/CSV) |
+| `GET` | `/api/chat/stats/<user_id>` | Get user usage statistics |
+| `GET` | `/api/chat/analytics` | Get system-wide analytics |
+| `GET` | `/api/debug/db-status` | Database status check |
+| `GET` | `/api/debug/user-data/<user_id>` | Get all user data |
 
 ---
 
 ## 🔐 Environment Variables
 
-### Backend (`.env`)
+### Backend (`Extension/.env`)
 ```bash
-# Database
-DATABASE_URL=postgresql://...      # Production DB (Render)
-USE_SQLITE=true                    # Use SQLite locally
+# AI Configuration (Required)
+GEMINI_API_KEY=your_api_key_here   # Google Gemini API key
 
-# AI
-GEMINI_API_KEY=your_api_key        # Google Gemini API key
-GEMINI_MODEL=gemini-1.5-flash      # Model to use
-
-# Security
+# Security (Optional - auto-generated if not set)
 SECRET_KEY=your_secret_key         # Flask secret key
-CORS_ORIGINS=http://localhost:3000 # Allowed origins
+
+# CORS (Optional - defaults to localhost)
+CORS_ORIGINS=http://localhost:3000,http://localhost:5173,chrome-extension://*
+
+# Flask Environment (Optional)
+FLASK_ENV=development              # development or production
 ```
 
-### Frontend (`.env.development` / `.env.production`)
+### Frontend (`Extension-frontend/.env` or `.env.development`)
 ```bash
-VITE_API_BASE_URL=http://localhost:5000/api  # Backend URL
+# Backend API URL
+VITE_API_BASE_URL=http://localhost:5000/api
 ```
 
 ---
 
-*Last Updated: December 23, 2025*
+## 🚦 Running the Application
+
+### Backend
+```bash
+cd Extension
+python run.py
+# Or: python app.py
+```
+
+### Frontend (Development)
+```bash
+cd Extension-frontend
+npm install
+npm run dev
+```
+
+### Frontend (Build for Chrome Extension)
+```bash
+cd Extension-frontend
+npm run build
+# Then load the 'dist' folder in Chrome as an unpacked extension
+```
+
+---
+
+*Last Updated: December 29, 2025 - Comprehensive audit completed, all files documented accurately*
