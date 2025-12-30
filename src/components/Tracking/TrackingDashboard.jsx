@@ -16,7 +16,7 @@ const TrackingDashboard = () => {
     const [history, setHistory] = useState([]);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState("overview");
-    const [periodDays, setPeriodDays] = useState(7);
+    const [periodDays, setPeriodDays] = useState(1);
 
     // Sync user ID with background script on mount
     useEffect(() => {
@@ -54,7 +54,7 @@ const TrackingDashboard = () => {
         try {
             const [analyticsRes, historyRes] = await Promise.all([
                 trackingService.getAnalytics(periodDays),
-                trackingService.getHistory(50)
+                trackingService.getHistory(50, 0, null, periodDays)
             ]);
 
             if (analyticsRes.success) {
@@ -82,18 +82,53 @@ const TrackingDashboard = () => {
 
     const formatTime = (timestamp) => {
         if (!timestamp) return "";
-        const date = new Date(timestamp);
-        return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        // Ensure timestamp is treated as UTC if no timezone indicator
+        let ts = timestamp;
+        if (!ts.endsWith('Z') && !ts.includes('+') && !ts.includes('-', 10)) {
+            ts = ts + 'Z';
+        }
+        const date = new Date(ts);
+        return date.toLocaleTimeString('en-IN', {
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: true,
+            timeZone: "Asia/Kolkata"
+        });
     };
 
     const formatDate = (timestamp) => {
         if (!timestamp) return "";
-        const date = new Date(timestamp);
-        return date.toLocaleDateString([], { month: "short", day: "numeric" });
+        // Ensure timestamp is treated as UTC if no timezone indicator
+        let ts = timestamp;
+        if (!ts.endsWith('Z') && !ts.includes('+') && !ts.includes('-', 10)) {
+            ts = ts + 'Z';
+        }
+        const date = new Date(ts);
+        return date.toLocaleDateString('en-IN', {
+            month: "short",
+            day: "numeric",
+            timeZone: "Asia/Kolkata"
+        });
     };
 
     const getDomainFavicon = (domain) => {
-        return `https://www.google.com/s2/favicons?domain=${domain}&sz=32`;
+        // Use DuckDuckGo's favicon service - more reliable for most domains
+        return `https://icons.duckduckgo.com/ip3/${domain}.ico`;
+    };
+
+    // Fallback icon when favicon fails to load
+    const FallbackIcon = ({ domain }) => {
+        const initial = domain ? domain.charAt(0).toUpperCase() : '?';
+        const colors = ['#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#f97316', '#eab308', '#22c55e', '#14b8a6', '#0ea5e9'];
+        const colorIndex = domain ? domain.charCodeAt(0) % colors.length : 0;
+        return (
+            <div
+                className="favicon-fallback"
+                style={{ backgroundColor: colors[colorIndex] }}
+            >
+                {initial}
+            </div>
+        );
     };
 
     if (loading) {
@@ -165,7 +200,7 @@ const TrackingDashboard = () => {
                             </div>
                             <div className="stat-info">
                                 <span className="stat-value">{analytics.unique_domains || 0}</span>
-                                <span className="stat-label">Unique Domains</span>
+                                <span className="stat-label">Unique Sites</span>
                             </div>
                         </div>
                         <div className="stat-card">
@@ -174,7 +209,20 @@ const TrackingDashboard = () => {
                             </div>
                             <div className="stat-info">
                                 <span className="stat-value">{analytics.total_duration_formatted || "0s"}</span>
-                                <span className="stat-label">Time Tracked</span>
+                                <span className="stat-label">Total Time</span>
+                            </div>
+                        </div>
+                        <div className="stat-card">
+                            <div className="stat-icon avg">
+                                <FiBarChart2 />
+                            </div>
+                            <div className="stat-info">
+                                <span className="stat-value">
+                                    {analytics.total_visits > 0
+                                        ? formatDuration(Math.round((analytics.total_duration_seconds || 0) / analytics.total_visits))
+                                        : "0s"}
+                                </span>
+                                <span className="stat-label">Avg. per Visit</span>
                             </div>
                         </div>
                     </div>
@@ -191,8 +239,12 @@ const TrackingDashboard = () => {
                                                 src={getDomainFavicon(domain.domain)}
                                                 alt=""
                                                 className="domain-favicon"
-                                                onError={(e) => e.target.style.display = 'none'}
+                                                onError={(e) => {
+                                                    e.target.style.display = 'none';
+                                                    e.target.nextSibling && e.target.nextSibling.classList.remove('hidden');
+                                                }}
                                             />
+                                            <FallbackIcon domain={domain.domain} />
                                             <span className="domain-name">{domain.domain}</span>
                                         </div>
                                         <div className="domain-stats">
@@ -216,27 +268,6 @@ const TrackingDashboard = () => {
                             )}
                         </div>
                     </div>
-
-                    {/* Activity by Hour */}
-                    {analytics.visits_by_hour && analytics.visits_by_hour.length > 0 && (
-                        <div className="section">
-                            <h3 className="section-title">Activity by Hour</h3>
-                            <div className="hourly-chart">
-                                {analytics.visits_by_hour.map((hour, index) => (
-                                    <div key={index} className="hour-bar-container">
-                                        <div
-                                            className="hour-bar"
-                                            style={{
-                                                height: `${Math.max(4, (hour.count / Math.max(...analytics.visits_by_hour.map(h => h.count))) * 100)}%`
-                                            }}
-                                            title={`${hour.hour}:00 - ${hour.count} visits`}
-                                        />
-                                        <span className="hour-label">{hour.hour}</span>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
                 </div>
             )}
 
@@ -250,8 +281,12 @@ const TrackingDashboard = () => {
                                         src={getDomainFavicon(visit.domain)}
                                         alt=""
                                         className="history-favicon"
-                                        onError={(e) => e.target.style.display = 'none'}
+                                        onError={(e) => {
+                                            e.target.style.display = 'none';
+                                            e.target.nextSibling && e.target.nextSibling.classList.remove('hidden');
+                                        }}
                                     />
+                                    <FallbackIcon domain={visit.domain} />
                                     <div className="history-info">
                                         <div className="history-title">
                                             {visit.title || visit.domain || visit.url}

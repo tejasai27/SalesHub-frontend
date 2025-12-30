@@ -10,6 +10,30 @@ let currentVisit = null;
 let visitStartTime = null;
 let cachedUserId = null;
 
+// Persist visit data to chrome.storage for service worker restarts
+async function persistVisitData() {
+    if (currentVisit && visitStartTime) {
+        await chrome.storage.local.set({
+            currentVisit: currentVisit,
+            visitStartTime: visitStartTime
+        });
+    }
+}
+
+// Load persisted visit data on startup
+async function loadPersistedVisitData() {
+    try {
+        const data = await chrome.storage.local.get(['currentVisit', 'visitStartTime']);
+        if (data.currentVisit && data.visitStartTime) {
+            currentVisit = data.currentVisit;
+            visitStartTime = data.visitStartTime;
+            console.log('[Tracking] Restored visit data from storage');
+        }
+    } catch (error) {
+        console.log('[Tracking] Could not restore visit data:', error.message);
+    }
+}
+
 // Get user ID - sync with frontend localStorage via message passing
 async function getUserId() {
     if (cachedUserId) {
@@ -94,7 +118,9 @@ async function logVisit(data) {
 async function updatePreviousVisitDuration() {
     if (currentVisit && currentVisit.visit_id && visitStartTime) {
         const duration = Math.round((Date.now() - visitStartTime) / 1000);
-        if (duration > 0) {
+
+        // Only update if duration is reasonable (> 0 and < 24 hours)
+        if (duration > 0 && duration < 86400) {
             try {
                 const response = await fetch(`${API_BASE_URL}/tracking/update-duration`, {
                     method: 'POST',
@@ -110,9 +136,16 @@ async function updatePreviousVisitDuration() {
             } catch (error) {
                 console.error('[Tracking] Error updating duration:', error.message);
             }
+        } else if (duration >= 86400) {
+            console.log('[Tracking] Skipping duration update - too long (> 24h):', duration);
         }
     }
 }
+
+// Track last logged URL to prevent duplicates
+let lastLoggedUrl = null;
+let lastLoggedTime = 0;
+const DEDUP_WINDOW_MS = 2000; // 2 seconds window to prevent duplicate logs
 
 // Handle new page visit
 async function handlePageVisit(tab, eventType) {
@@ -123,6 +156,13 @@ async function handlePageVisit(tab, eventType) {
 
     if (!shouldTrackUrl(tab.url)) {
         console.log('[Tracking] Skipped (excluded URL):', tab.url.substring(0, 50));
+        return;
+    }
+
+    // Deduplication: Skip if same URL was logged recently
+    const now = Date.now();
+    if (tab.url === lastLoggedUrl && (now - lastLoggedTime) < DEDUP_WINDOW_MS) {
+        console.log('[Tracking] Skipped (duplicate within 2s):', tab.url.substring(0, 50));
         return;
     }
 
@@ -143,9 +183,14 @@ async function handlePageVisit(tab, eventType) {
         favicon_url: tab.favIconUrl || ''
     });
 
-    // Update current visit tracking
+    // Update tracking state
+    lastLoggedUrl = tab.url;
+    lastLoggedTime = now;
     currentVisit = result;
-    visitStartTime = Date.now();
+    visitStartTime = now;
+
+    // Persist to storage in case service worker restarts
+    await persistVisitData();
 }
 
 // Listen for tab activation (switching between tabs)
@@ -153,7 +198,7 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
     console.log('[Tracking] Tab activated:', activeInfo.tabId);
     try {
         const tab = await chrome.tabs.get(activeInfo.tabId);
-        await handlePageVisit(tab, 'tab_switch');
+        await handlePageVisit(tab, 'page_visit');
     } catch (error) {
         console.error('[Tracking] Error on tab activation:', error.message);
     }
@@ -168,7 +213,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
             const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
             if (activeTab && activeTab.id === tabId) {
                 console.log('[Tracking] Page loaded in active tab:', tabId);
-                await handlePageVisit(tab, 'url_change');
+                await handlePageVisit(tab, 'page_visit');
             }
         } catch (error) {
             console.error('[Tracking] Error on URL update:', error.message);
@@ -179,6 +224,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
 // Track when extension starts - get current active tab
 chrome.runtime.onStartup.addListener(async () => {
     console.log('[Tracking] Extension startup');
+    await loadPersistedVisitData();
     try {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         if (tab) {
@@ -199,6 +245,21 @@ chrome.runtime.onInstalled.addListener(async (details) => {
         }
     } catch (error) {
         console.error('[Tracking] Error on install:', error.message);
+    }
+});
+
+// Keep service worker alive with periodic alarm
+chrome.alarms.create('keepAlive', { periodInMinutes: 1 });
+chrome.alarms.onAlarm.addListener(async (alarm) => {
+    if (alarm.name === 'keepAlive') {
+        // Update duration for current visit periodically
+        if (currentVisit && visitStartTime) {
+            const duration = Math.round((Date.now() - visitStartTime) / 1000);
+            console.log('[Tracking] Heartbeat - current page duration:', duration, 'seconds');
+
+            // Persist current state
+            await persistVisitData();
+        }
     }
 });
 
@@ -238,8 +299,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // Initialize - log that we're ready
 console.log('[Tracking] 🚀 Background service worker initialized');
 
-// Immediately try to track current tab
+// Load persisted data and track current tab
 (async () => {
+    await loadPersistedVisitData();
     try {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         if (tab && shouldTrackUrl(tab.url)) {

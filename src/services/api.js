@@ -287,12 +287,15 @@ export const healthService = {
 
 // Tracking service for website visit analytics
 export const trackingService = {
-  getHistory: async (limit = 100, offset = 0, domain = null) => {
+  getHistory: async (limit = 100, offset = 0, domain = null, days = null) => {
     try {
       const userId = getUserId();
       let url = `/tracking/history/${userId}?limit=${limit}&offset=${offset}`;
       if (domain) {
         url += `&domain=${encodeURIComponent(domain)}`;
+      }
+      if (days) {
+        url += `&days=${days}`;
       }
       const response = await api.get(url);
       return response.data;
