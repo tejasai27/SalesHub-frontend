@@ -21,7 +21,8 @@
     "storage",
     "tabs",
     "activeTab",
-    "alarms"
+    "alarms",
+    "idle"
   ],
   "host_permissions": [
     "http://localhost:5000/*",
@@ -29,5 +30,16 @@
   ],
   "background": {
     "service_worker": "background.js"
-  }
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content-activity.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
 }

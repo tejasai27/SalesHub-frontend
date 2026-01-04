@@ -1,41 +1,52 @@
 /**
  * Background Service Worker for Website Tracking
- * Robust domain-based tracking with deduplication and debouncing
+ * Activity-based tracking - only counts time when user is actively interacting
  */
 
 const API_BASE_URL = 'http://localhost:5000/api';
 
 // ==================== State Management ====================
 let currentVisit = null;
-let visitStartTime = null;
 let cachedUserId = null;
 let lastLoggedDomain = null;
 let lastLoggedTime = 0;
 let debounceTimer = null;
 
+// Activity tracking state
+let activeSeconds = 0;           // Accumulated active time for current visit
+let lastActivityTime = 0;        // Last time user was active (from content script)
+let lastHeartbeatTime = 0;       // Last heartbeat timestamp
+let isUserActive = false;        // Whether user is currently active
+
 // Configuration
-const DEDUP_WINDOW_MS = 5000;  // 5 seconds - longer window for slow sites
-const DEBOUNCE_DELAY_MS = 1000; // 1 second - wait for page to stabilize
+const DEDUP_WINDOW_MS = 5000;      // 5 seconds - longer window for slow sites
+const DEBOUNCE_DELAY_MS = 1000;   // 1 second - wait for page to stabilize
+const IDLE_THRESHOLD_MS = 60000;  // 60 seconds - consider idle after this
+const SYSTEM_IDLE_SECONDS = 60;   // Chrome idle API threshold
 
 // ==================== Persistence ====================
 async function persistVisitData() {
-    if (currentVisit && visitStartTime) {
+    if (currentVisit) {
         await chrome.storage.local.set({
             currentVisit: currentVisit,
-            visitStartTime: visitStartTime,
-            lastLoggedDomain: lastLoggedDomain
+            activeSeconds: activeSeconds,
+            lastLoggedDomain: lastLoggedDomain,
+            lastActivityTime: lastActivityTime
         });
     }
 }
 
 async function loadPersistedVisitData() {
     try {
-        const data = await chrome.storage.local.get(['currentVisit', 'visitStartTime', 'lastLoggedDomain']);
-        if (data.currentVisit && data.visitStartTime) {
+        const data = await chrome.storage.local.get([
+            'currentVisit', 'activeSeconds', 'lastLoggedDomain', 'lastActivityTime'
+        ]);
+        if (data.currentVisit) {
             currentVisit = data.currentVisit;
-            visitStartTime = data.visitStartTime;
+            activeSeconds = data.activeSeconds || 0;
             lastLoggedDomain = data.lastLoggedDomain || null;
-            console.log('[Tracking] ✓ Restored visit data from storage');
+            lastActivityTime = data.lastActivityTime || 0;
+            console.log('[Tracking] ✓ Restored visit data from storage, active seconds:', activeSeconds);
         }
     } catch (error) {
         console.log('[Tracking] Could not restore visit data:', error.message);
@@ -89,6 +100,59 @@ function shouldTrackUrl(url) {
     return !excludedPrefixes.some(prefix => url.startsWith(prefix));
 }
 
+// ==================== Activity Detection ====================
+
+/**
+ * Check if user is currently active based on:
+ * 1. Recent activity from content script
+ * 2. Chrome system idle state
+ */
+async function checkUserActive() {
+    const now = Date.now();
+
+    // Check content script activity
+    const contentActive = (now - lastActivityTime) < IDLE_THRESHOLD_MS;
+
+    // Check system idle state
+    let systemActive = true;
+    try {
+        const state = await chrome.idle.queryState(SYSTEM_IDLE_SECONDS);
+        systemActive = (state === 'active');
+        if (!systemActive) {
+            console.log('[Tracking] System idle state:', state);
+        }
+    } catch (error) {
+        // Idle API might not be available, assume active
+    }
+
+    return contentActive && systemActive;
+}
+
+/**
+ * Handle activity detection from content script
+ */
+function handleActivityDetected(domain) {
+    const now = Date.now();
+    const wasActive = isUserActive;
+
+    lastActivityTime = now;
+    isUserActive = true;
+
+    if (!wasActive) {
+        console.log('[Tracking] 🟢 User active on:', domain || lastLoggedDomain);
+    }
+}
+
+/**
+ * Handle user going idle
+ */
+function handleUserIdle() {
+    if (isUserActive) {
+        console.log('[Tracking] 🔴 User idle on:', lastLoggedDomain);
+    }
+    isUserActive = false;
+}
+
 // ==================== API Calls ====================
 async function logVisit(data) {
     try {
@@ -134,18 +198,17 @@ async function updateDuration(visitId, duration) {
             })
         });
         if (response.ok) {
-            console.log('[Tracking] ⏱️ Duration updated:', duration, 'seconds');
+            console.log('[Tracking] ⏱️ Duration updated:', duration, 'seconds (active time)');
         }
     } catch (error) {
         console.error('[Tracking] Error updating duration:', error.message);
     }
 }
 
-// Update duration for previous visit
+// Update duration for previous visit with accumulated active time
 async function finalizePreviousVisit() {
-    if (currentVisit && currentVisit.visit_id && visitStartTime) {
-        const duration = Math.round((Date.now() - visitStartTime) / 1000);
-        await updateDuration(currentVisit.visit_id, duration);
+    if (currentVisit && currentVisit.visit_id && activeSeconds > 0) {
+        await updateDuration(currentVisit.visit_id, activeSeconds);
     }
 }
 
@@ -167,7 +230,6 @@ async function trackDomainVisit(tab, eventType = 'page_visit') {
     // SAME DOMAIN - Don't create new entry, just continue tracking time
     if (domain === lastLoggedDomain) {
         console.log('[Tracking] ⏭️ Same domain, continuing time tracking:', domain);
-        // Update the last logged time to prevent stale state
         lastLoggedTime = now;
         return;
     }
@@ -189,11 +251,14 @@ async function trackDomainVisit(tab, eventType = 'page_visit') {
         favicon_url: tab.favIconUrl || ''
     });
 
-    // Update state
+    // Reset state for new visit
     lastLoggedDomain = domain;
     lastLoggedTime = now;
     currentVisit = result;
-    visitStartTime = now;
+    activeSeconds = 0;  // Start fresh for new domain
+    lastHeartbeatTime = now;
+    lastActivityTime = now;  // Assume active when navigating
+    isUserActive = true;
 
     // Persist for service worker restarts
     await persistVisitData();
@@ -220,9 +285,9 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
         if (domain !== lastLoggedDomain) {
             await trackDomainVisit(tab, 'tab_switch');
         } else {
-            // Same domain - just reset timer for accurate duration
-            visitStartTime = Date.now();
-            console.log('[Tracking] ⏭️ Same domain, resetting timer');
+            // Same domain - consider user active since they switched here
+            handleActivityDetected(domain);
+            console.log('[Tracking] ⏭️ Same domain, user returned');
         }
     } catch (error) {
         console.error('[Tracking] Error on tab activation:', error.message);
@@ -273,27 +338,66 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 });
 
 // Keep service worker alive and periodically update duration
-chrome.alarms.create('keepAlive', { periodInMinutes: 1 });
+chrome.alarms.create('keepAlive', { periodInMinutes: 0.5 });  // Every 30 seconds for more accurate tracking
 chrome.alarms.onAlarm.addListener(async (alarm) => {
-    if (alarm.name === 'keepAlive' && currentVisit && visitStartTime) {
-        const duration = Math.round((Date.now() - visitStartTime) / 1000);
-        console.log('[Tracking] 💓 Heartbeat - active for', duration, 'seconds on', lastLoggedDomain);
+    if (alarm.name === 'keepAlive' && currentVisit) {
+        const now = Date.now();
+        const isActive = await checkUserActive();
 
-        // Update duration in database periodically
-        await updateDuration(currentVisit.visit_id, duration);
+        // Calculate time since last heartbeat
+        const secondsSinceLastHeartbeat = Math.round((now - lastHeartbeatTime) / 1000);
+
+        if (isActive && secondsSinceLastHeartbeat > 0) {
+            // Only add time if user was active
+            activeSeconds += secondsSinceLastHeartbeat;
+            console.log('[Tracking] 💓 Heartbeat - ACTIVE. Added', secondsSinceLastHeartbeat, 's. Total:', activeSeconds, 's on', lastLoggedDomain);
+
+            // Update duration in database
+            await updateDuration(currentVisit.visit_id, activeSeconds);
+        } else {
+            console.log('[Tracking] 💤 Heartbeat - IDLE. No time added. Total:', activeSeconds, 's on', lastLoggedDomain);
+        }
+
+        lastHeartbeatTime = now;
         await persistVisitData();
+    }
+});
+
+// System idle state change listener
+chrome.idle.onStateChanged.addListener((state) => {
+    console.log('[Tracking] System state changed:', state);
+    if (state === 'active') {
+        handleActivityDetected(lastLoggedDomain);
+    } else {
+        handleUserIdle();
     }
 });
 
 // ==================== Message Handlers ====================
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    // Activity detected from content script
+    if (message.type === 'ACTIVITY_DETECTED') {
+        const domain = message.url ? extractDomain(message.url) : null;
+        handleActivityDetected(domain);
+        sendResponse({ received: true });
+        return true;
+    }
+
+    // User went idle (from content script)
+    if (message.type === 'USER_IDLE') {
+        handleUserIdle();
+        sendResponse({ received: true });
+        return true;
+    }
+
     if (message.type === 'GET_TRACKING_STATUS') {
         getUserId().then(userId => {
             sendResponse({
                 active: true,
                 userId: userId,
                 currentVisit: currentVisit,
-                visitStartTime: visitStartTime,
+                activeSeconds: activeSeconds,
+                isUserActive: isUserActive,
                 lastLoggedDomain: lastLoggedDomain
             });
         });
@@ -319,10 +423,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 // ==================== Initialization ====================
-console.log('[Tracking] 🚀 Background service worker initialized (Robust Mode)');
+console.log('[Tracking] 🚀 Background service worker initialized (Activity-Based Mode)');
 
 (async () => {
     await loadPersistedVisitData();
+    lastHeartbeatTime = Date.now();
+
     try {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         if (tab && shouldTrackUrl(tab.url)) {
