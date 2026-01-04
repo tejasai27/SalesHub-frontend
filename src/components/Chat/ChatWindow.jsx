@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { chatService, utils } from '../../services/api';
+import { useHubSpotContext } from '../../hooks/useHubSpotContext';
 import Button from '../Common/Button';
 import Input from '../Common/Input';
-import { FiSend, FiUser, FiMessageSquare, FiZap, FiCopy, FiCheck, FiRefreshCw } from 'react-icons/fi';
+import { FiSend, FiUser, FiMessageSquare, FiZap, FiCopy, FiCheck, FiRefreshCw, FiTarget } from 'react-icons/fi';
 
 // Sales-focused example prompts
 const EXAMPLE_PROMPTS = [
@@ -24,6 +25,12 @@ const ChatWindow = ({ chatId, showHistory, hideHeader = false, onChatUpdate, sid
   const [rateLimit, setRateLimit] = useState(null);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
+
+  // Get HubSpot deal context
+  const { dealId, deal, dynamicPrompts, isHubSpotDeal, hasDealId, dealName, dealStage, loading: hubspotLoading, fetchDeal, error: hubspotError } = useHubSpotContext();
+
+  // Use dynamic prompts if deal is fetched, otherwise fall back to defaults
+  const activePrompts = isHubSpotDeal ? dynamicPrompts : EXAMPLE_PROMPTS;
 
   useEffect(() => {
     testConnection();
@@ -89,7 +96,8 @@ const ChatWindow = ({ chatId, showHistory, hideHeader = false, onChatUpdate, sid
     if (onChatUpdate) onChatUpdate();
 
     try {
-      const response = await chatService.sendMessage(userMessage.message);
+      // Pass HubSpot deal ID if available for context-aware responses
+      const response = await chatService.sendMessage(userMessage.message, dealId);
 
       // Update rate limit info if available
       if (response.rate_limit) {
@@ -246,9 +254,58 @@ const ChatWindow = ({ chatId, showHistory, hideHeader = false, onChatUpdate, sid
 
               {connectionStatus === 'connected' && (
                 <div className="w-full max-w-lg">
-                  <p className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-4">Try these prompts</p>
+                  {/* HubSpot Deal Detection - Show fetch button first */}
+                  {hasDealId && !isHubSpotDeal && (
+                    <div className="mb-4 p-4 bg-gradient-to-r from-orange-50 to-amber-50 rounded-xl border border-orange-200">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <FiTarget className="w-5 h-5 text-orange-600" />
+                          <span className="text-sm font-medium text-orange-800">HubSpot Deal Detected</span>
+                        </div>
+                        <button
+                          onClick={fetchDeal}
+                          disabled={hubspotLoading}
+                          className="px-4 py-1.5 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        >
+                          {hubspotLoading ? (
+                            <>
+                              <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                              Fetching...
+                            </>
+                          ) : (
+                            'Fetch Deal'
+                          )}
+                        </button>
+                      </div>
+                      {hubspotError && (
+                        <p className="text-xs text-red-600 mt-2">
+                          Error: {hubspotError}
+                        </p>
+                      )}
+                      <p className="text-xs text-orange-600 mt-2">
+                        Click "Fetch Deal" to load deal context and get relevant prompts
+                      </p>
+                    </div>
+                  )}
+
+                  {/* HubSpot Deal Loaded - Show deal info */}
+                  {isHubSpotDeal && (
+                    <div className="mb-4 p-3 bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl border border-green-200">
+                      <div className="flex items-center gap-2">
+                        <FiTarget className="w-4 h-4 text-green-600" />
+                        <span className="text-sm font-medium text-green-800">HubSpot Deal Loaded</span>
+                      </div>
+                      <p className="text-xs text-green-600 mt-1">
+                        {dealName}{dealStage ? ` • ${dealStage}` : ''}
+                      </p>
+                    </div>
+                  )}
+
+                  <p className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-4">
+                    {isHubSpotDeal ? 'Deal-specific prompts' : 'Try these prompts'}
+                  </p>
                   <div className={`grid gap-2 ${sidebarOpen ? 'grid-cols-1' : 'grid-cols-2'}`}>
-                    {EXAMPLE_PROMPTS.map((prompt, index) => (
+                    {activePrompts.map((prompt, index) => (
                       <button
                         key={index}
                         onClick={() => handlePromptClick(prompt.text)}
@@ -259,7 +316,9 @@ const ChatWindow = ({ chatId, showHistory, hideHeader = false, onChatUpdate, sid
                           <span className="text-2xl group-hover:scale-110 transition-transform duration-200">{prompt.emoji}</span>
                           <div>
                             <span className="text-sm font-medium text-slate-700 group-hover:text-blue-700">{prompt.text}</span>
-                            <span className="block text-xs text-slate-400 group-hover:text-blue-500">{prompt.category}</span>
+                            <span className="block text-xs text-slate-400 group-hover:text-blue-500">
+                              {prompt.contextHint || prompt.category}
+                            </span>
                           </div>
                         </div>
                       </button>

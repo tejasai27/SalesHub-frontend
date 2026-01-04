@@ -40,6 +40,20 @@
         "content-activity.js"
       ],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://app.hubspot.com/*",
+        "https://app-na1.hubspot.com/*",
+        "https://app-na2.hubspot.com/*",
+        "https://app-eu1.hubspot.com/*",
+        "https://app-eu2.hubspot.com/*",
+        "https://app-apac1.hubspot.com/*"
+      ],
+      "js": [
+        "content-hubspot.js"
+      ],
+      "run_at": "document_idle"
     }
   ]
 }

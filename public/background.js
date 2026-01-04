@@ -18,6 +18,9 @@ let lastActivityTime = 0;        // Last time user was active (from content scri
 let lastHeartbeatTime = 0;       // Last heartbeat timestamp
 let isUserActive = false;        // Whether user is currently active
 
+// HubSpot context state
+let currentHubSpotDealId = null; // Current HubSpot deal ID from content script
+
 // Configuration
 const DEDUP_WINDOW_MS = 5000;      // 5 seconds - longer window for slow sites
 const DEBOUNCE_DELAY_MS = 1000;   // 1 second - wait for page to stabilize
@@ -387,6 +390,27 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === 'USER_IDLE') {
         handleUserIdle();
         sendResponse({ received: true });
+        return true;
+    }
+
+    // HubSpot deal ID from content script
+    if (message.type === 'HUBSPOT_DEAL_ID') {
+        currentHubSpotDealId = message.dealId;
+        if (message.dealId) {
+            console.log('[Tracking] 📊 HubSpot deal detected:', message.dealId);
+        } else {
+            console.log('[Tracking] 📊 HubSpot deal cleared');
+        }
+        sendResponse({ received: true });
+        return true;
+    }
+
+    // Get current HubSpot deal ID (for frontend popup)
+    if (message.type === 'GET_HUBSPOT_DEAL_ID') {
+        sendResponse({
+            success: true,
+            dealId: currentHubSpotDealId
+        });
         return true;
     }
 

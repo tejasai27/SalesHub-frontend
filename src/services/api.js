@@ -217,12 +217,17 @@ const clearChatMessages = (chatId) => {
 
 // Chat API calls
 export const chatService = {
-  sendMessage: async (message) => {
+  sendMessage: async (message, dealId = null) => {
     const payload = {
       message,
       user_id: getUserId(),
       session_id: getSessionId(),
     };
+
+    // Add HubSpot deal ID if available
+    if (dealId) {
+      payload.hubspot_deal_id = dealId;
+    }
 
     try {
       const response = await api.post("/chat/send", payload);
